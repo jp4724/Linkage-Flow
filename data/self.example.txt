@@ -1,0 +1,4 @@
+# Linkage Flow — 个人简介模板
+# 复制本文件为 self.txt 后填写内容（self.txt 已被 .gitignore 忽略，不会提交）
+
+在此粘贴你的简历、LinkedIn 摘要或用于生成邮件的自我介绍。

@@ -1,0 +1,47 @@
+# 敏感配置文件
+.env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.mypy_cache/
+
+# 数据库与日志（任意 SQLite 文件名）
+*.db
+*.sqlite
+*.sqlite3
+*.log
+
+# 本地简历/简介（勿提交真实简历）
+data/self.txt
+
+# Streamlit 密钥（若使用）
+.streamlit/secrets.toml
+
+# Jupyter
+.ipynb_checkpoints/
+
+# 操作系统 / IDE
+.DS_Store
+Thumbs.db
+
+# 临时测试文件
+test_input.txt
+test_output*.txt
+
+# 虚拟环境
+venv/
+.venv/
+
+# 生成物（求职信 PDF/Word 等）
+output/*
+!output/.gitkeep
+
+# 本地/个人用：不纳入版本库（已从索引移除）
+JAA Cover Letter.ipynb
+JAA Test.ipynb
+JAA Alumni.ipynb
+Job Application Assistance (JAA).code-workspace
+US Summer Intern.csv
