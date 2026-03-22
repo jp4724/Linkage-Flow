@@ -1,7 +1,7 @@
 import streamlit as st
 import os
 
-# Streamlit Cloud：Secrets 不会自动进 os.environ，需在导入 AI_func / generate_mail 之前注入
+# Streamlit Cloud：在导入会读取 GEMINI_API_KEY 的模块之前，把 Secrets 写入环境变量
 try:
     if hasattr(st, "secrets") and st.secrets and "GEMINI_API_KEY" in st.secrets:
         os.environ.setdefault("GEMINI_API_KEY", str(st.secrets["GEMINI_API_KEY"]))
@@ -39,25 +39,64 @@ def get_db_connection():
     return conn
 
 # Function to safely query data and return a DataFrame
-def query_to_dataframe(query, params=()):
+def query_to_dataframe(query, params=(), *, show_error: bool = True):
     conn = get_db_connection()
     try:
         df = pd.read_sql_query(query, conn, params=params)
         return df
     except Exception as e:
-        st.error(f"Database Query Error: {e}")
+        if show_error:
+            st.error(f"Database Query Error: {e}")
         return pd.DataFrame()
 
 
+# 与 query.sql 中 alumni 表一致；查询失败时避免 0 列空表导致 KeyError
+_ALUMNI_COLUMNS = [
+    "id",
+    "linkedin_url",
+    "full_name",
+    "location",
+    "about",
+    "cur_role",
+    "experience",
+    "education",
+    "contact_info",
+    "shared_connections",
+    "skills",
+    "languages",
+    "num_conn",
+    "yrs_at_cur",
+    "yrs_aft_grad",
+    "customized_mail_text",
+    "raw_info_string",
+]
+
+
+def load_alumni_dataframe() -> pd.DataFrame:
+    df = query_to_dataframe("SELECT * FROM alumni", show_error=False)
+    if df.columns.size == 0 or "full_name" not in df.columns:
+        return pd.DataFrame(columns=_ALUMNI_COLUMNS)
+    return df
+
+
 # --- 1. Page Configuration ---
-_APP_DIR = Path(__file__).resolve().parent
-_PAGE_ICON = _APP_DIR / "Linkage_Flow_Icon_reversed.png"
+_ROOT = Path(__file__).resolve().parent
+_PAGE_ICON = _ROOT / "Linkage_Flow_Icon_reversed.png"
 
 st.set_page_config(
     page_title="Linkage Flow",
     layout="wide",
     page_icon=str(_PAGE_ICON) if _PAGE_ICON.is_file() else "🤝",
 )
+
+# 无 JAA.db 则创建；无 alumni 表则执行 query.sql 中的 create_alumni_table
+try:
+    db_func.ensure_alumni_table(
+        db_name=str(_ROOT / "JAA.db"),
+        sql_path=str(_ROOT / "query.sql"),
+    )
+except Exception as e:
+    st.error(f"数据库初始化失败：{e}")
 
 # --- 2. Custom CSS for Professional Look ---
 st.markdown("""
@@ -102,6 +141,9 @@ st.title("Linkage Flow")
 # --- 5. Navigation Tabs ---
 tab1, tab2, tab3, tab4= st.tabs(["Self Information", "📊 Database Management", "✉️ Email Generator", "📈 Analytics"])
 
+Path("data").mkdir(parents=True, exist_ok=True)
+alumni_df = load_alumni_dataframe()
+
 with tab1:
     st.header("Self Information")
     col1, col2 = st.columns([1,1])
@@ -135,30 +177,15 @@ with tab2:
 
 
     st.write("### Database Records Preview")
-    # Example logic to display DB
-    # 1. Fetch alumni names for the dropdown
-    alumni_df = query_to_dataframe("SELECT * FROM alumni")
-    alumni_df[['full_name','cur_role']]
-    # names_list = alumni_df['full_name'].tolist() if not alumni_df.empty else []
-
-    # # 2. Display the selectbox in the UI
-    # if names_list:
-    #     selected_name = st.selectbox("Select Alumni to Contact:", names_list)
-        
-    #     # 3. Once a name is selected, fetch their full details
-    #     if selected_name:
-    #         # Using parameterized query to prevent SQL injection
-    #         details_query = "SELECT * FROM alumni WHERE full_name = ?"
-    #         details_df = query_to_dataframe(details_query, params=(selected_name,))
-            
-    #         if not details_df.empty:
-    #             target_profile = details_df.iloc[0] # Get the first (and only) row
-    #             st.write(f"**Target Role:** {target_profile['job_title']} @ {target_profile['company']}")
-    # else:
-    #     st.warning("No alumni records found. Please ingest data in Tab 1.")
-    # # df = db_func.get_all_alumni()
-    # # st.dataframe(df, use_container_width=True)
-    # st.info("Record preview will appear here once the database is connected.")
+    if alumni_df.empty:
+        st.info(
+            "No alumni rows yet. On **Streamlit Cloud** the database is recreated when the app restarts; "
+            "import data via your pipeline or use a local `JAA.db`."
+        )
+    else:
+        preview_cols = [c for c in ("full_name", "cur_role") if c in alumni_df.columns]
+        if preview_cols:
+            st.dataframe(alumni_df[preview_cols], use_container_width=True)
 
 # --- Tab 2: Email Generator ---
 with tab3:
@@ -168,44 +195,49 @@ with tab3:
     
     with left_col:
         st.write("### Select Target")
-        # This would be populated from your DB
-        contact_name_list = [""] + alumni_df['full_name'].to_list()
+        names_series = alumni_df["full_name"].dropna().astype(str)
+        names_series = names_series[names_series.str.strip() != ""]
+        contact_name_list = [""] + names_series.unique().tolist()
         contact_name = st.selectbox("Search Target Name", contact_name_list)
 
-        
+        selected_info = None
         display_text = ""
-        if contact_name and contact_name in alumni_df['full_name'].values:
-            selected_info = alumni_df[alumni_df['full_name'] == contact_name].iloc[0]
-
-            display_text = '\n'.join([f"{k}: {v}" for k, v in selected_info.to_dict().items() if v == v])
-        else:
-            display_text = ""
-        st.text_area('Contact Bio',value=display_text,disabled=True,height=600)
+        if contact_name and not alumni_df.empty and "full_name" in alumni_df.columns:
+            match = alumni_df[alumni_df["full_name"] == contact_name]
+            if not match.empty:
+                selected_info = match.iloc[0]
+                display_text = "\n".join(
+                    f"{k}: {v}" for k, v in selected_info.to_dict().items() if v == v
+                )
+        st.text_area("Contact Bio", value=display_text, disabled=True, height=600)
 
         if st.button("Generate Tailored Email"):
             with st.spinner("Analyzing profile and drafting..."):
-                # Your generate_customized_mail(qresult) logic goes here
                 self_info = ""
-                with open('data/self.txt', 'r', encoding='utf-8') as file:
-                    self_info = file.read()
-                if self_info == "":
+                try:
+                    with open("data/self.txt", "r", encoding="utf-8") as file:
+                        self_info = file.read()
+                except FileNotFoundError:
+                    self_info = ""
+                if alumni_df.empty:
+                    st.error("No alumni in the database. Add contacts first (e.g. import CSV / local DB).")
+                elif selected_info is None:
+                    st.error("Please select a contact from the list before generating.")
+                elif not self_info.strip():
                     st.error("Please fill in your Self Information in Tab 1 before generating emails.")
                 else:
-                    st.session_state['generated_email'] = generate_customized_mail(self_info, selected_info)
+                    st.session_state["generated_email"] = generate_customized_mail(
+                        self_info, selected_info
+                    )
 
     with right_col:
         st.write("### Generated Output")
-        # st.session_state
-        # st.success("Done!", icon='✅')
-        # st.button("Rerun!")
         if 'generated_email' in st.session_state:
             st.text_area("Draft Content", st.session_state['generated_email'], height=350)
             
             c1, c2 = st.columns(2)
             with c1:
                 pass
-                # if st.button("✅ Save to Networking Log"):
-                #     st.toast("Record saved to Database!")
             with c2:
                 st_copy_to_clipboard(st.session_state['generated_email'], before_copy_label="📋 Copy to Clipboard", after_copy_label='Copied!✅')
 
@@ -213,16 +245,8 @@ with tab3:
 with tab4:
     st.header("Networking Statistics")
     
-    # Showcase your Stats background here!
     col1, col2, col3 = st.columns(3)
     col1.metric("Profiles Processed", alumni_df.shape[0])
-    # col2.metric("Avg Match Score", "0.82", "+0.05")
-    # col3.metric("Response Rate", "15%", "Personalized")
-    
-    # st.write("### Alumni Industry Distribution")
-    # Example Chart
-    # chart_data = pd.DataFrame({'Industry': ['Finance', 'Tech', 'Consulting'], 'Count': [45, 30, 15]})
-    # st.bar_chart(chart_data, x='Industry', y='Count')
 
 # --- 6. Footer ---
 st.divider()

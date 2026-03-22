@@ -1,9 +1,48 @@
 import sqlite3
 import logging
+from pathlib import Path
 from sqlalchemy import create_engine, text
 import pandas as pd
 
 logger = logging.getLogger("AlumniETL.db")
+
+
+def ensure_alumni_table(
+    db_name: str = "JAA.db",
+    sql_path: str | None = None,
+) -> None:
+    """
+    若数据库文件不存在则自动创建；若尚无 alumni 表，则执行 query.sql 中
+    -- @name: create_alumni_table 对应的建表语句。
+    """
+    db_path = Path(db_name)
+    if sql_path is None:
+        sql_file = Path(__file__).resolve().parent / "query.sql"
+    else:
+        sql_file = Path(sql_path)
+
+    if not sql_file.is_file():
+        raise FileNotFoundError(f"SQL file not found: {sql_file}")
+
+    queries = get_query_dict(str(sql_file))
+    key = "create_alumni_table"
+    if key not in queries or not queries[key].strip():
+        raise ValueError(f"Named query '{key}' missing or empty in {sql_file}")
+
+    create_sql = queries[key].strip()
+
+    with sqlite3.connect(str(db_path)) as conn:
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name=? LIMIT 1",
+            ("alumni",),
+        )
+        if cur.fetchone() is None:
+            cur.execute(create_sql)
+            conn.commit()
+            logger.info("Created table 'alumni' in %s", db_path)
+        else:
+            logger.debug("Table 'alumni' already exists in %s", db_path)
 
 def write_df_to_db(df, db_name='JAA.db', table_name='alumni'):
     # write dataframe to db
