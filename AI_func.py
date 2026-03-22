@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
 load_dotenv()
-API_KEY = os.getenv("GEMINI_API_KEY").strip()
+API_KEY = (os.getenv("GEMINI_API_KEY") or "").strip()
 logger = logging.getLogger("AlumniETL.AI")
 
 @retry(
@@ -28,6 +28,10 @@ logger = logging.getLogger("AlumniETL.AI")
     )
 )
 def invoke_gemini(main_request,*, model_id = 'gemini-2.5-flash', system_instruction=None):
+    if not API_KEY:
+        raise ValueError(
+            "GEMINI_API_KEY is not set. Use Streamlit Cloud Secrets or a local .env file."
+        )
     # Fill in the question
     try: 
         content = main_request

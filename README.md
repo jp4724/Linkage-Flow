@@ -64,21 +64,27 @@ python -m venv .venv
 
 ### 2) Install dependencies
 
-If you do not have a `requirements.txt` yet, install directly:
-
 ```powershell
-pip install streamlit pandas sqlalchemy google-genai python-dotenv tenacity pyyaml st-copy-to-clipboard
+pip install -r requirements.txt
 ```
 
 ### 3) Configure environment variables
 
-Create a `.env` file in the project root:
+**Local:** create a `.env` file in the project root:
 
 ```env
 GEMINI_API_KEY=your_api_key_here
 ```
 
 You can also set this inside the app sidebar and click **Save Key**.
+
+**Streamlit Community Cloud:** in the app **Settings → Secrets**, add:
+
+```toml
+GEMINI_API_KEY = "your_api_key_here"
+```
+
+The app maps this into `os.environ` before loading Gemini-related modules.
 
 ### 4) Initialize database
 

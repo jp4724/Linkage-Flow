@@ -1,8 +1,16 @@
 import streamlit as st
+import os
+
+# Streamlit Cloud：Secrets 不会自动进 os.environ，需在导入 AI_func / generate_mail 之前注入
+try:
+    if hasattr(st, "secrets") and st.secrets and "GEMINI_API_KEY" in st.secrets:
+        os.environ.setdefault("GEMINI_API_KEY", str(st.secrets["GEMINI_API_KEY"]))
+except Exception:
+    pass
+
 import pandas as pd
 import sqlite3
 import time
-import os
 from pathlib import Path
 from generate_mail import generate_customized_mail
 from datetime import datetime
@@ -84,7 +92,7 @@ with st.sidebar:
     
     # st.subheader("Matching Logic")
     # match_threshold = st.slider("Similarity Threshold", 0.0, 1.0, 0.70)
-    
+     
     #st.info("This tool helps students automate personalized networking outreach using LLMs.")
 
 # --- 4. Main Header ---
