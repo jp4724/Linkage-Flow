@@ -6,6 +6,18 @@
 
 AI-powered networking and job-application assistant built with Streamlit, SQLite, and Gemini.
 
+## Try the app (hosted)
+
+**No install needed** — open the live Streamlit deployment:
+
+**[https://linkage-flow.streamlit.app/](https://linkage-flow.streamlit.app/)**
+
+The **app owner** should set `GEMINI_API_KEY` in **[Streamlit Community Cloud → app → Settings → Secrets](https://share.streamlit.io/)** so Gemini works for everyone using the link. Visitors can open the URL and use the UI without installing anything.
+
+> **Note:** The cloud database is **ephemeral** (SQLite on Streamlit Cloud resets when the app restarts). For persistent contacts, run the app **locally** with `JAA.db` or connect a remote database.
+
+---
+
 ## What This Project Does
 
 Linkage Flow helps you automate high-value parts of your outreach workflow:
@@ -16,11 +28,23 @@ Linkage Flow helps you automate high-value parts of your outreach workflow:
 
 ---
 
+## Demo
+
+Screen recording of generating a personalized outreach email (fill **Self Information**, pick a contact, **Generate**, copy result):
+
+<p align="center">
+  <img src="./show.gif" alt="Demo: generating a tailored networking email in Linkage Flow" width="920" />
+</p>
+
+Place **`show.gif`** in the repository root next to `README.md` so the image loads on GitHub.
+
+---
+
 ## Main Features
 
 - **Profile + data workflow:** Manage records from uploaded CSVs and preview them in-app.
 - **Personalized email generation:** Uses Gemini with prompt instructions tuned for short outreach emails.
-- **Local-first architecture:** SQLite database (`JAA.db`) keeps data on your machine.
+- **Local-first architecture:** SQLite (`JAA.db`) — persistent when you run locally; on Streamlit Cloud the file is recreated when the app sleeps/restarts.
 - **Prompt-driven behavior:** `prompts.yaml` controls LLM extraction and generation instructions.
 - **API key management in UI:** Save `GEMINI_API_KEY` into `.env` from the Streamlit sidebar.
 ---
@@ -86,13 +110,12 @@ GEMINI_API_KEY = "your_api_key_here"
 
 The app maps this into `os.environ` before loading Gemini-related modules.
 
-### 4) Initialize database
+### 4) Database
 
-Run the SQL in `query.sql` to create the `alumni` table (for example in DB Browser for SQLite, SQLite CLI, or a small Python script).
+On startup, the app **creates `JAA.db` if missing** and runs the `create_alumni_table` statement from `query.sql` (via `db_func.ensure_alumni_table`). You can still run other statements in `query.sql` manually (e.g. in DB Browser) if needed.
 
-By default, the app expects:
 - Database file: `JAA.db`
-- Table name: `alumni`
+- Table: `alumni`
 
 ### 5) Run the app
 
@@ -126,7 +149,6 @@ Then open the local URL shown in terminal (typically `http://localhost:8501`).
 ---
 ## Roadmap Ideas
 
-- Add a formal `requirements.txt` and one-command setup.
 - Wire full CSV-to-structured-data extraction flow into the Streamlit ingestion button.
 - Add automated tests for database and email-generation functions.
 - Add tracking for sent emails and response outcomes.
